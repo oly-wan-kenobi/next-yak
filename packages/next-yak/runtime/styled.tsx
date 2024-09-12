@@ -7,6 +7,7 @@ import React from "react";
 // to another file for classic react components
 import { useTheme } from "next-yak/context";
 import type { YakTheme } from "./context/index.d.ts";
+import { domElementTags } from "./internals/domElements.js";
 
 /** Symbol */
 const noTheme = {};
@@ -179,6 +180,18 @@ type StyledLiteral<T> = <TCSSProps>(
   __yak: true;
 };
 
+type StyledAttrs<Tag extends HtmlTags> = {
+  attrs: <
+    TAttrsIn extends object = {},
+    TAttrsOut extends AttrsMerged<
+      JSX.IntrinsicElements[Tag],
+      TAttrsIn
+    > = AttrsMerged<JSX.IntrinsicElements[Tag], TAttrsIn>,
+  >(
+    attrs: Attrs<JSX.IntrinsicElements[Tag], TAttrsIn, TAttrsOut>,
+  ) => StyledLiteral<Substitute<JSX.IntrinsicElements[Tag], TAttrsIn>>;
+}
+
 /**
  * The `styled` method works perfectly on all of your own or any third-party component,
  * as long as they attach the passed className prop to a DOM element.
@@ -192,26 +205,17 @@ type StyledLiteral<T> = <TCSSProps>(
  * `;
  * ```
  */
-export const styled = new Proxy(
-  StyledFactory as typeof StyledFactory & {
-    [Tag in HtmlTags]: StyledLiteral<JSX.IntrinsicElements[Tag]> & {
-      attrs: <
-        TAttrsIn extends object = {},
-        TAttrsOut extends AttrsMerged<
-          JSX.IntrinsicElements[Tag],
-          TAttrsIn
-        > = AttrsMerged<JSX.IntrinsicElements[Tag], TAttrsIn>,
-      >(
-        attrs: Attrs<JSX.IntrinsicElements[Tag], TAttrsIn, TAttrsOut>,
-      ) => StyledLiteral<Substitute<JSX.IntrinsicElements[Tag], TAttrsIn>>;
-    };
-  },
-  {
-    get(target, TagName: keyof JSX.IntrinsicElements) {
-      return target(TagName);
-    },
-  },
-);
+export const styled = (() => {
+  const styledBase = StyledFactory as typeof StyledFactory & {
+    [Tag in HtmlTags]: StyledLiteral<JSX.IntrinsicElements[Tag]> & StyledAttrs<Tag>;
+  }
+  
+  domElementTags.forEach((tag: HtmlTags) => {
+    styledBase[tag] = styledBase(tag) as StyledLiteral<JSX.IntrinsicElements[typeof tag]> & StyledAttrs<typeof tag>
+  })
+
+  return styledBase
+})()
 
 // Remove all entries that start with a $ sign
 function removePrefixedProperties<T extends Record<string, unknown>>(obj: T) {
